@@ -26,9 +26,12 @@ def ask(contents, retries=3):
             response = client.models.generate_content(
                 model=MODEL, 
                 contents=contents,
-                config=types.GenerateContentConfig(system_instruction=SYSTEM)
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM, 
+                    max_output_tokens=500
+                )
             )
-            return response.text
+            return response
         except errors.ServerError as e:
             wait = 2 ** attempt
             print(f"Server busy ({e.code}), retrying in {wait}s...")
@@ -38,6 +41,7 @@ def ask(contents, retries=3):
 
 messages = []
 turn = 0
+total_tokens = 0
 while True:
     user_input = input("You: ").strip()
     if not user_input:
@@ -50,13 +54,23 @@ while True:
         messages = []
         print("Conversation cleared.")
         continue
+    elif user_input.lower() == "/cost":
+        print(f"Total tokens used so far: {total_tokens}")
+        continue
     messages.append({"role": "user", "parts": [{"text": user_input}]})
     try:
-        reply = ask(messages)
+        response = ask(messages)
+        reply = response.text
+        usage = response.usage_metadata
     except RuntimeError as e:
         print(e)
         messages.pop()
         continue
     turn += 1
+    total_tokens += usage.total_token_count
     messages.append({"role": "model", "parts": [{"text": reply}]})
     print(f"[Turn {turn}] Gemini: {reply}")
+    print(f"(tokens: {usage.prompt_token_count} in, {usage.candidates_token_count} out)")
+
+    if response.candidates[0].finish_reason.name == "MAX_TOKENS":
+        print("(Warning: answer was cut off. Ask me to continue.)")
