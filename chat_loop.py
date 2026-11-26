@@ -21,10 +21,19 @@ def ask(contents, retries=3):
     raise RuntimeError("Gemini is still unavailable")
 
 messages = []
+turn = 0
 while True:
-    user_input = input("You: ")
+    user_input = input("You: ").strip()
+    if not user_input:
+        continue
+
     if user_input.lower() in {"quit", "exit"}:
         break
+    elif user_input.lower() == "/reset":
+        turn = 0
+        messages = []
+        print("Conversation cleared.")
+        continue
     messages.append({"role": "user", "parts": [{"text": user_input}]})
     try:
         reply = ask(messages)
@@ -32,5 +41,6 @@ while True:
         print(e)
         messages.pop()
         continue
+    turn += 1
     messages.append({"role": "model", "parts": [{"text": reply}]})
-    print("Gemini: ", reply)
+    print(f"[Turn {turn}] Gemini: {reply}")
