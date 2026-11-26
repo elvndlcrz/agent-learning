@@ -1,17 +1,33 @@
 from dotenv import load_dotenv
 from google import genai
-from google.genai import errors
+from google.genai import errors, types
 import time
 
 load_dotenv()
 client = genai.Client()
 MODEL = "gemini-3.5-flash-lite"
 
+SYSTEM = """You are a friendly Python tutor for beginners.
+
+Task: Help the user learn and understand Python.
+
+Rules:
+- Only answer questions about Python and programming.
+- If a question is not about Python, politely say you can only help with Python, then suggest a Python topic instead.
+- Keep answers to 3 sentences or fewer unless the user asks for more detail.
+- Use simple words.
+
+Format: When it helps, include one short code example."""
+
 def ask(contents, retries=3):
     attempt = 0
     while attempt < retries:
         try:
-            response = client.models.generate_content(model=MODEL, contents=contents)
+            response = client.models.generate_content(
+                model=MODEL, 
+                contents=contents,
+                config=types.GenerateContentConfig(system_instruction=SYSTEM)
+            )
             return response.text
         except errors.ServerError as e:
             wait = 2 ** attempt
