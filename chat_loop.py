@@ -19,20 +19,32 @@ Rules:
 
 Format: When it helps, include one short code example."""
 
-def ask(contents, retries=3):
+def stream_reply(contents, retries=3):
     attempt = 0
     while attempt < retries:
+        full_reply = ""
+        last_chunk = None
         try:
-            response = client.models.generate_content(
-                model=MODEL, 
+            stream = client.models.generate_content_stream(
+                model=MODEL,
                 contents=contents,
                 config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM, 
-                    max_output_tokens=500
-                )
+                    system_instruction=SYSTEM,
+                    max_output_tokens=500,
+                ),
             )
-            return response
+            for chunk in stream:
+                if chunk.text:
+                    print(chunk.text, end="", flush=True)
+                    full_reply += chunk.text
+                last_chunk = chunk
+            print()  # move to a new line after the reply
+            return full_reply, last_chunk
         except errors.ServerError as e:
+            if full_reply:
+                # text was already shown, so don't retry and repeat it
+                print("\n(Connection problem, the answer was interrupted.)")
+                return full_reply, last_chunk
             wait = 2 ** attempt
             print(f"Server busy ({e.code}), retrying in {wait}s...")
             time.sleep(wait)
@@ -58,19 +70,17 @@ while True:
         print(f"Total tokens used so far: {total_tokens}")
         continue
     messages.append({"role": "user", "parts": [{"text": user_input}]})
+    print(f"[Turn {turn + 1}] Gemini: ", end="", flush=True)
     try:
-        response = ask(messages)
-        reply = response.text
-        usage = response.usage_metadata
+        reply, last_chunk = stream_reply(messages)
     except RuntimeError as e:
         print(e)
         messages.pop()
         continue
     turn += 1
+    usage = last_chunk.usage_metadata
     total_tokens += usage.total_token_count
-    messages.append({"role": "model", "parts": [{"text": reply}]})
-    print(f"[Turn {turn}] Gemini: {reply}")
     print(f"(tokens: {usage.prompt_token_count} in, {usage.candidates_token_count} out)")
 
-    if response.candidates[0].finish_reason.name == "MAX_TOKENS":
+    if last_chunk.candidates[0].finish_reason.name == "MAX_TOKENS":
         print("(Warning: answer was cut off. Ask me to continue.)")
