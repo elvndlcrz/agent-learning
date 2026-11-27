@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel, Field
+import time
 
 
 load_dotenv()
@@ -28,16 +29,25 @@ class Contact(BaseModel):
     email: str | None
     phone: str | None
 
-def extract_contact(text):
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=f"Extract the contact details from this text:\n\n{text}",
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=Contact,
-        ),
-    )
-    return response.parsed
+def extract_contact(text, retries=3):
+    attempt = 0
+    while attempt < retries:
+        try:
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=f"Extract the contact details from this text:\n\n{text}",
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=Contact,
+                ),
+            )
+            return response.parsed
+        except errors.ServerError as e:
+            wait = 2 ** attempt
+            print(f"Server busy ({e.code}), retrying in {wait}s...")
+            time.sleep(wait)
+            attempt += 1
+    raise RuntimeError("Gemini is still unavailable")
 
 for text in texts:
     contact = extract_contact(text)
